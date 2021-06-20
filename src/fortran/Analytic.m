@@ -21,9 +21,9 @@ L = 3.0;
 ne = 6;
 np = ne+1;
 theta = 0.5;
-deltat = 0.005;
+deltat = 0.01;
 startt = 0.0;
-stopt = 1.0;
+stopt = 0.1;
 
 t = startt;
 
@@ -67,6 +67,10 @@ K(np,np) = K2/2;
 
 C(np,np-1) = C1;
 C(np,np) = C2/2;
+
+K
+
+C
 
 #function [ analu, analv ] = analytic( time )
 #
@@ -130,11 +134,13 @@ function y = g ( z )
 
    for i = 2:np-1
 
-     y(i)= c/6.0*(2*z(i+1)*z(i+1)+z(i-1)*z(i)-z(i)*z(i+1)-2*z(i-1)*z(i-1));
+     y(i)= c/6.0*(z(i+1)*z(i+1)-z(i-1)*z(i)+z(i)*z(i+1)-z(i-1)*z(i-1));
 
    endfor
    
    y(np) = c/6.0*(2*z(np)*z(np)-z(np-1)*z(np)-z(np-1)*z(np-1));
+
+   y
 
 endfunction 
 
@@ -159,6 +165,8 @@ function J = delgdelu ( z )
    J(np,np-1) = c/6.0*(-z(np)-2*z(np-1));
    J(np,np) = c/6.0*(4*z(np)-z(np-1));
 
+   J
+
 endfunction
 
 function y = newg ( myalpha )
@@ -179,7 +187,19 @@ function r = residual ( myalpha )
    global beta;
    global theta;
 
-   r = A*myalpha + theta*newg( myalpha ) + (1-theta)*prevg + beta;
+   linearpart = A*myalpha
+
+   nonlinearpart = theta*newg( myalpha ) 
+
+   lhs = A*myalpha + theta*newg( myalpha ) 
+
+   linearpart = beta
+   
+   nonlinearpart = (1-theta)*prevg
+
+   rhs = -(1-theta)*prevg - beta
+
+   r = lhs - rhs
 	 
 endfunction
 
@@ -204,7 +224,7 @@ function J = Jacobian ( myalpha )
 
 endfunction
 
-function [ reducedr, reducedJacobian ] = reducedfunction ( reducedalpha )
+function [ reducedr, reducedJ ] = reducedfunction ( reducedalpha )
 
    global alpha;
    global np;
@@ -213,17 +233,19 @@ function [ reducedr, reducedJacobian ] = reducedfunction ( reducedalpha )
   
    myalpha(1) = alpha(1);
    myalpha(2:np-1) = reducedalpha(1:np-2);
-   myalpha(np) = alpha(np);
+   myalpha(np) = alpha(np)
 
-   r = residual( myalpha );
+   r = residual( myalpha )
 
-   reducedr = r(2:np-1);
+   reducedr = r(2:np-1)
 
-   if(nargout > 1)
+   normreducedr = norm(reducedr)
 
-      J = Jacobian( myalpha );
+   if (nargout == 2)
+   
+      J = Jacobian( myalpha )
 
-      reducedJ = J(2:np-1,2:np-1);
+      reducedJ = J(2:np-1,2:np-1)
 
    endif
 
@@ -255,15 +277,15 @@ A = C + theta*deltat*K;
 
 [ u, analyticv ] = analytic( t );
 
-currentg = g( u );
+prevu = u
+
+currentg = g( u )
 
 while t < stopt
 
   t = t + deltat
 
   [ analyticu, analyticv ] = analytic( t )
-
-  prevu = u
 
   prevg = currentg
 
@@ -273,13 +295,16 @@ while t < stopt
 
   alpha = ( analyticu - predictedu )/deltat
 
-  beta = K*meanpredictedu;
+  prevu = u
+
+  beta = K*meanpredictedu
 
   startalpha = zeros(np-2,1);
   
   #startalpha = analyticv(2:np-1);
 
-  [ reducedalpha, fval, info ] = fsolve( @reducedfunction, startalpha );
+  #[ reducedalpha, fval, info ] = fsolve( @reducedfunction, startalpha );
+  [ reducedalpha, fval, info ] = fsolve( @reducedfunction, startalpha, optimset ("jacobian", "on") )
 
   alpha(2:np-1) = reducedalpha
 
