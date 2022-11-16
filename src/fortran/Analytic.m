@@ -1,92 +1,168 @@
+global FIRST_DEGREE=1;
+global SECOND_DEGREE=2;
+global THIRD_DEGREE=3;
+
+global START_ALPHA_ZERO=1;
+global START_ALPHA_PREVIOUS=2;
+global START_ALPHA_ANALYTIC=3;
+
 global a;
 global b;
 global c;
 global D;
 global E;
 global L;
-global ne ;
-global np;
-global theta;
-global deltat;
-global startt;
-global stopt;
+global numElements;
+global numNodes;
+global deltaT;
+global startT;
+global stopT;
 global t;
+global degree;
+global startAlphaType;
+global theta1;
+global theta2;
+global theta3;
+global massMatrixFactor = 0.0;
+global dampingMatrixFactor = 0.0;
+global stiffnessMatrixFactor = 0.0;
+global jacobianMatrixFactor = 0.0;
+global currentFunctionFactor = 0.0;
+global previousFunctionFactor = 0.0;
+global previous2FunctionFactor = 0.0;
+global previous3FunctionFactor = 0.0;
+global analyticFunction;
 
 a = 1.0;
 b = -1.0;
 c = 1.0;
+
+analyticFunction = 2;
 D = 1.0;
 E = 1.0;
 L = 3.0;
-ne = 6;
-np = ne+1;
-theta = 0.5;
-deltat = 0.01;
-startt = 0.0;
-stopt = 0.1;
 
-t = startt;
+numElements = 6;
+numNodes = numElements+1;
 
-global x = zeros(np,1);
+deltaT = 0.005;
+startT = 0.0;
+#stopT = 0.1;
+stopT = 0.05;
 
-global K = zeros(np,np);
-global C = zeros(np,np);
+#degree = FIRST_DEGREE;
+#degree = SECOND_DEGREE;
+degree = THIRD_DEGREE;
 
-K1 = b*ne/L;
-K2 = -2*b*ne/L;
-C1 = a*L/(6*ne);
-C2 = (2*a*L)/(3*ne);
+#startAlphaType = START_ALPHA_ZERO;
+#startAlphaType = START_ALPHA_PREVIOUS;
+startAlphaType = START_ALPHA_ANALYTIC;  
 
-x(1) = 0.0;
-alpha(1) = 0.0;
+switch (degree)
+ case FIRST_DEGREE
+   #Crank-Nicolson
+   theta1 = 0.5;
+   stiffnessMatrixFactor = theta1*deltaT;
+   dampingMatrixFactor = 1.0;
+   jacobianMatrixFactor = theta1*deltaT;
+   currentFunctionFactor = theta1;
+   previousFunctionFactor = (1.0 - theta1);
+ case SECOND_DEGREE
+   #Newmark
+   theta1 = 2.0;
+   theta2 = 1.0;
+   stiffnessMatrixFactor = (theta2*deltaT*deltaT)/2.0;
+   dampingMatrixFactor = theta1*deltaT;
+   massMatrixFactor = 1.0;
+   jacobianMatrixFactor = (theta2 + theta1)*deltaT*deltaT/4.0;
+   currentFunctionFactor = (theta2 + theta1)/2.0;
+   previousFunctionFactor = (1.0 - theta2);
+   previous2FunctionFactor = (theta2 - theta1)/2.0;
+ case THIRD_DEGREE
+   #Newmark
+   theta1 = 1.0+0.1;
+   theta2 = 2.0/3.0-0.1+2.0*0.3025;
+   theta3 = 6.0*0.3025;
+   stiffnessMatrixFactor = (theta3*deltaT*deltaT*deltaT)/6.0;
+   dampingMatrixFactor = (theta2*deltaT*deltaT)/2.0;
+   massMatrixFactor = theta1*deltaT;
+   jacobianMatrixFactor = (theta3 + 3.0*theta2 + 2.0*theta1)*deltaT*deltaT*deltaT/36.0;
+   currentFunctionFactor = (theta3 + 3.0*theta2 + 2.0*theta1)/6.0;
+   previousFunctionFactor = (1.0 - (theta3 + 2.0*theta2 - theta1)/2.0);
+   previous2FunctionFactor = (theta3 + theta2 - 2.0*theta1)/2.0;
+   previous3FunctionFactor = (theta1 - theta3)/6.0;
+ otherwise
+   printf("ERROR: Invalid degree value.\n");
+   quit
+endswitch
 
-K(1,1) = K2/2;
-K(1,2) = K1;
+function x = computeGeometry( )
 
-C(1,1) = C2/2;
-C(1,2) = C1;
+  global L;
+  global numElements;
+  global numNodes;
+  global x = zeros(numNodes,1);
 
-for i = 2:np-1
+  x(1) = 0.0;
+  for i = 2:numNodes-1
+    x(i) = (i-1)*L/numElements;
+  endfor
+  x(numNodes) = L;
 
-  x(i) = (i-1)*L/ne;
+endfunction	    
 
-  K(i,i-1) = K1;
-  K(i,i) = K2;
-  K(i,i+1) = K1;
+function [ A, M, C, K ] = computeMatrices( )
 
-  C(i,i-1) = C1;
-  C(i,i) = C2;
-  C(i,i+1) = C1;
+  global a;
+  global b;
+  global c;
+  global L;
+  global numElements;
+  global numNodes;
+  global stiffnessMatrixFactor;
+  global dampingMatrixFactor;
+  global massMatrixFactor;
+  global K = zeros(numNodes,numNodes);
+  global C = zeros(numNodes,numNodes);
+  global M = zeros(numNodes,numNodes);
+  global A = zeros(numNodes,numNodes);
+
+  K1 = b*numElements/L;
+  K2 = -2.0*b*numElements/L;
+  C1 = a*L/(6.0*numElements);
+  C2 = (2.0*a*L)/(3.0*numElements);
+
+  K(1,1) = K2/2;
+  K(1,2) = K1;
+
+  C(1,1) = C2/2;
+  C(1,2) = C1;
+
+  for i = 2:numNodes-1
+
+    K(i,i-1) = K1;
+    K(i,i) = K2;
+    K(i,i+1) = K1;
+
+    C(i,i-1) = C1;
+    C(i,i) = C2;
+    C(i,i+1) = C1;
     
-endfor
+  endfor
 
-x(np) = L;
+  K(numNodes,numNodes-1) = K1;
+  K(numNodes,numNodes) = K2/2;
 
-K(np,np-1) = K1;
-K(np,np) = K2/2;
+  C(numNodes,numNodes-1) = C1;
+  C(numNodes,numNodes) = C2/2;
 
-C(np,np-1) = C1;
-C(np,np) = C2/2;
+  A = massMatrixFactor*M + dampingMatrixFactor*C + stiffnessMatrixFactor*K;
 
-K
+  #cond(A);
 
-C
+endfunction
 
-#function [ analu, analv ] = analytic( time )
-#
-#  global a;
-#  global b;
-#  global c;
-#  global D;
-#  global E;
-#  global x;
-#
-#  analu = (D+a*x)/(E+c*time);
-#  analv = -c*(D+a*x)/((E+c*time)*(E+c*time));
-#
-#endfunction
-
-function [ analu, analv ] = analytic( t )
+function [ analyticU, analyticV, analyticA, analyticG ] = analytic( t )
 
   global a;
   global b;
@@ -94,110 +170,129 @@ function [ analu, analv ] = analytic( t )
   global D;
   global E;
   global x;
-  global np;
+  global numNodes;
+  global analyticFunction;
 
-  analu = zeros(np,1);
-  analv = zeros(np,1);
+  analyticU = zeros(numNodes,1);
+  analyticV = zeros(numNodes,1);
+  analyticA = zeros(numNodes,1);
+  analyticG = zeros(numNodes,1);
 
-  for i=1:np
-    analu(i) = a*D+2*b/(c*(x(i)-c*D*t+E));
-    analv(i) = 2*b*c*D/(c*(x(i)-c*D*t+E)*(x(i)-c*D*t+E));
-  endfor
+  switch (analyticFunction)
+    case 1
+      for i=1:numNodes
+	analyticU(i) = (D+a*x(i))/(E+c*t);
+        analyticV(i) = -c*(D+a*x(i))/((E+c*t)*(E+c*t));
+        analyticA(i) = 2.0*c*c*(D+a*x(i))/((E+c*t)*(E+c*t)*(E+c*t));
+      endfor
+    case 2
+      for i=1:numNodes
+        analyticU(i) = a*D+2.0*b/(c*(x(i)-c*D*t+E));
+        analyticV(i) = 2.0*b*D/((x(i)-c*D*t+E)*(x(i)-c*D*t+E));
+        analyticA(i) = 4.0*b*c*D*D/((x(i)-c*D*t+E)*(x(i)-c*D*t+E)*(x(i)-c*D*t+E));
+      endfor      
+    otherwise
+       printf("ERROR: Invalid analytic function value.\n");
+       quit
+  endswitch
 
+  analyticG = g( analyticU );
+    
 endfunction
 
-function [ err, normerr ] = error( z, analz )
+function [ err, percentErr, rmsErr ] = error( z, analyticZ )
 
-  [ numrow, numcol ] = size( z );
-  err = zeros(numrow,1);
+  [ numRows, numCols ] = size( z );
+  err = zeros(numRows,1);
+  percentErr = zeros(numRows,1);
   sum = 0.0;
-  for i = 1:numrow
-    if( abs(analz(i)) > 0.00000001 )
-      err(i) = 100.0*(z(i)-analz(i))/analz(i);
+  printf("  row    value analytic      err    %%err \n");
+  for i = 1:numRows
+    err(i) = (z(i)-analyticZ(i));
+    if( abs(analyticZ(i)) > 0.00000001 )
+      percentErr(i) = 100.0*(z(i)-analyticZ(i))/analyticZ(i);
     else
-      err(i) = 0.0;
+      percentErr(i) = 0.0;
     endif
     sum = sum + err(i)*err(i);
+    printf("%5d %8.5f %8.5f %8.5f %7.2f\n",i,z(i),analyticZ(i),err(i),percentErr(i));
   endfor
-  normerr = sqrt(sum);
+  rmsErr = sqrt(sum/numRows)
 
 endfunction
 
 function y = g ( z )
 
    global c;
-   global np;
+   global numNodes;
 
-   y = zeros(np,1);
+   y = zeros(numNodes,1);
   
-   y(1)=c/6.0*(z(2)*z(2)+z(1)*z(2)-2*z(1)*z(1));
+   y(1)=c/6.0*(2.0*z(1)*z(1)-z(1)*z(2)-z(2)*z(2));
 
-   for i = 2:np-1
+   for i = 2:numNodes-1
 
-     y(i)= c/6.0*(z(i+1)*z(i+1)-z(i-1)*z(i)+z(i)*z(i+1)-z(i-1)*z(i-1));
+     y(i)= c/6.0*(z(i-1)*z(i-1)+z(i-1)*z(i)-z(i)*z(i+1)-z(i+1)*z(i+1));
 
    endfor
    
-   y(np) = c/6.0*(2*z(np)*z(np)-z(np-1)*z(np)-z(np-1)*z(np-1));
+   y(numNodes) = c/6.0*(z(numNodes-1)*z(numNodes-1)+z(numNodes-1)*z(numNodes)-2.0*z(numNodes)*z(numNodes));
 
-   y
+   #y
 
 endfunction 
 
 function J = delgdelu ( z )
 
    global c;
-   global np;
+   global numNodes;
 
-   J = zeros(np,np);
+   J = zeros(numNodes,numNodes);
    
-   J(1,1) = c/6.0*(z(2)-4*z(1));
-   J(1,2) = c/6.0*(2*z(2)+z(1));
+   J(1,1) = c/6.0*(4.0*z(1)-z(2));
+   J(1,2) = c/6.0*(-z(1)-2.0*z(2));
 
-   for i = 2:np-1
+   for i = 2:numNodes-1
 
-     J(i,i-1) = c/6.0*(-z(i)-2*z(i-1));
-     J(i,i) = c/6.0*(z(i+1)-z(i-1));
-     J(i,i+1) = c/6.0*(2*z(i+1)+z(i));
+     J(i,i-1) = c/6.0*(2.0*z(i-1)+z(i));
+     J(i,i) = c/6.0*(z(i-1)-z(i+1));
+     J(i,i+1) = c/6.0*(-z(i)-2.0*z(i+1));
 
    endfor
 
-   J(np,np-1) = c/6.0*(-z(np)-2*z(np-1));
-   J(np,np) = c/6.0*(4*z(np)-z(np-1));
+   J(numNodes,numNodes-1) = c/6.0*(2.0*z(numNodes-1)+z(numNodes));
+   J(numNodes,numNodes) = c/6.0*(z(numNodes-1)-4.0*z(numNodes));
 
    J
 
 endfunction
 
-function y = newg ( myalpha )
+function y = newg ( myAlpha )
   
-   global predictedu;
-   global deltat;
+   global predictedU;
+   global deltaT;
 
-   newu = predictedu + deltat*myalpha;
+   newU = newUCalculate( myAlpha );
 
-   y = g( newu );
+   y = g( newU );
 
 endfunction 
 
-function r = residual ( myalpha )
+function r = Residual ( myAlpha )
 
    global A;
-   global prevg;
+   global currentFunctionFactor;
+   global previousFunctionFactor;
+   global previous2FunctionFactor;
+   global previous3FunctionFactor;
+   global previousG;
+   global previous2G;
+   global previous3G;
    global beta;
-   global theta;
 
-   linearpart = A*myalpha
+   lhs = A*myAlpha + currentFunctionFactor*newg( myAlpha ) 
 
-   nonlinearpart = theta*newg( myalpha ) 
-
-   lhs = A*myalpha + theta*newg( myalpha ) 
-
-   linearpart = beta
-   
-   nonlinearpart = (1-theta)*prevg
-
-   rhs = -(1-theta)*prevg - beta
+   rhs = -previousFunctionFactor*previousG - previous2FunctionFactor*previous2G - previous3FunctionFactor*previous3G - beta
 
    r = lhs - rhs
 	 
@@ -205,132 +300,447 @@ endfunction
 
 function jacnewg = delnewgdelu ( alpha )
 
-   global predictedu;
-   global deltat;
+   global predictedU;
+   global deltaT;
 
-   newu = predictedu + deltat*alpha;
+   newU = newUCalculate( alpha );
 
-   jacnewg = delgdelu ( newu );
+   jacnewg = delgdelu ( newU );
 
 endfunction
 
-function J = Jacobian ( myalpha )
+function J = Jacobian ( myAlpha )
 
    global A;
-   global theta;
-   global deltat;
+   global jacobianMatrixFactor;
 
-   J = A + theta*deltat*delnewgdelu ( myalpha );
+   J = A + jacobianMatrixFactor*delnewgdelu ( myAlpha );
 
 endfunction
 
-function [ reducedr, reducedJ ] = reducedfunction ( reducedalpha )
+function [ reducedR, reducedJ ] = reducedFunction ( reducedAlpha )
 
    global alpha;
-   global np;
+   global numNodes;
 
-   myalpha = zeros(np,1); 
+   myAlpha = zeros(numNodes,1); 
   
-   myalpha(1) = alpha(1);
-   myalpha(2:np-1) = reducedalpha(1:np-2);
-   myalpha(np) = alpha(np)
+   myAlpha(1) = alpha(1);
+   myAlpha(2:numNodes-1) = reducedAlpha(1:numNodes-2);
+   myAlpha(numNodes) = alpha(numNodes)
 
-   r = residual( myalpha )
+   r = Residual( myAlpha )
 
-   reducedr = r(2:np-1)
+   reducedR = r(2:numNodes-1)
 
-   normreducedr = norm(reducedr)
+   normReducedR = norm(reducedR)
 
    if (nargout == 2)
    
-      J = Jacobian( myalpha )
+      J = Jacobian( myAlpha )
 
-      reducedJ = J(2:np-1,2:np-1)
+      reducedJ = J(2:numNodes-1,2:numNodes-1)
 
    endif
 
 endfunction
 
-global A = zeros(np,np);
-global u = zeros(np,1);
-global v = zeros(np,1);
-global analyticu = zeros(np,1);
-global analyticv = zeros(np,1);
-global meanpredictedu = zeros(np,1);
-global predictedu = zeros(np,1);
-global prevu = zeros(np,1);
-global currentg = zeros(np,1);
-global analyticg = zeros(np,1);
-global prevg = zeros(np,1);
-global alpha = zeros(np,1);
-global reducedalpha = zeros(np-2,1);
-global beta = zeros(np,1);
-global resid = zeros(np,1);
-global psi = zeros(np,1);
-global analyticresid = zeros(np,1);
-global uerr = zeros(np,1);
-global uerrnorm = 0.0;
+function [ meanPredictedU, meanPredictedV, meanPredictedA ] = meanPredictedCalculate ( )
 
-A = C + theta*deltat*K;
+   global previousU;
+   global previousV;
+   global previousA;
+   global degree;
+   global FIRST_DEGREE;
+   global SECOND_DEGREE;
+   global THIRD_DEGREE;
+   global theta1;
+   global theta2;
+   global deltaT;
+   global numNodes;
 
-#cond(A)
+   switch (degree)
+     case FIRST_DEGREE
+       meanPredictedU = previousU;
+       meanPredictedV = zeros(numNodes,1);
+       meanPredictedA = zeros(numNodes,1);
+     case SECOND_DEGREE
+       meanPredictedU = previousU + theta1*deltaT*previousV;
+       meanPredictedV = previousV;
+       meanPredictedA = zeros(numNodes,1);
+     case THIRD_DEGREE
+       meanPredictedU = previousU + theta1*deltaT*previousV + theta2*deltaT*deltaT*previousA/2.0;
+       meanPredictedV = previousV + theta1*deltaT*previousA;
+       meanPredictedA = previousA;
+     otherwise
+       printf("ERROR: Invalid degree value.\n");
+       quit
+   endswitch
 
-[ u, analyticv ] = analytic( t );
+endfunction
 
-prevu = u
+function predictedU = predictedUCalculate ( )
 
-currentg = g( u )
+   global previousU;
+   global previousV;
+   global previousA;
+   global degree;
+   global FIRST_DEGREE;
+   global SECOND_DEGREE;
+   global THIRD_DEGREE;
+   global deltaT;
 
-while t < stopt
+   switch (degree)
+     case FIRST_DEGREE
+       predictedU = previousU;
+     case SECOND_DEGREE
+       predictedU = previousU + deltaT*previousV;
+     case THIRD_DEGREE
+       predictedU = previousU + deltaT*previousV + deltaT*deltaT*previousA/2.0;
+     otherwise
+       printf("ERROR: Invalid degree value.\n");
+       quit
+   endswitch
 
-  t = t + deltat
+endfunction
 
-  [ analyticu, analyticv ] = analytic( t )
+function newU = newUCalculate ( myAlpha )
 
-  prevg = currentg
+   global predictedU;
+   global degree;
+   global FIRST_DEGREE;
+   global SECOND_DEGREE;
+   global THIRD_DEGREE;
+   global deltaT;
 
-  meanpredictedu = u
+   switch (degree)
+     case FIRST_DEGREE
+       newU = predictedU + deltaT*myAlpha;
+     case SECOND_DEGREE
+       newU = predictedU + deltaT*deltaT*myAlpha/2.0;
+     case THIRD_DEGREE
+       newU = predictedU + deltaT*deltaT*deltaT*myAlpha/6.0;
+     otherwise
+       printf("ERROR: Invalid degree value.\n");
+       quit
+   endswitch
 
-  predictedu = u
+endfunction
 
-  alpha = ( analyticu - predictedu )/deltat
+function [ alpha, startAlpha ] = updateBoundaryConditions( )
 
-  prevu = u
+  global analyticU;
+  global analyticV;
+  global analyticA;
+  global currentU;
+  global currentV;
+  global currentA;
+  global previousU;
+  global previousV;
+  global previousA;
+  global numNodes;
+  global deltaT;
+  global degree;
+  global FIRST_DEGREE;
+  global SECOND_DEGREE;
+  global THIRD_DEGREE;
+  global startAlphaType;
+  global START_ALPHA_ZERO;
+  global START_ALPHA_PREVIOUS;
+  global START_ALPHA_ANALYTIC;
+  global alpha = zeros(numNodes,1);
 
-  beta = K*meanpredictedu
+  startAlphaType
 
-  startalpha = zeros(np-2,1);
+  switch (degree)
+    case FIRST_DEGREE
+      currentU(1) = analyticU(1);
+      currentU(numNodes) = analyticU(numNodes);
+      alpha(1) = ( currentU(1) - previousU(1) )/deltaT;
+      alpha(numNodes) = ( currentU(numNodes) - previousU(numNodes) )/deltaT;
+      switch (startAlphaType)
+	case START_ALPHA_ZERO
+          startAlpha = zeros(numNodes-2,1);
+	case START_ALPHA_PREVIOUS
+	  startAlpha = ( currentU(2:numNodes-1) - previousU(2:numNodes-1) )/deltaT;
+	case START_ALPHA_ANALYTIC
+	  startAlpha = ( analyticU(2:numNodes-1) - previousU(2:numNodes-1) )/deltaT;
+	otherwise
+          printf("ERROR: Invalid start alpha value.\n");
+          quit
+      endswitch
+    case SECOND_DEGREE
+      currentU(1) = analyticU(1);
+      currentU(numNodes) = analyticU(numNodes);
+      currentV(1) = analyticV(1);
+      currentV(numNodes) = analyticV(numNodes);
+      alpha(1) = ( currentV(1) - previousV(1) )/deltaT;
+      alpha(numNodes) = ( currentV(numNodes) - previousV(numNodes) )/deltaT;
+      switch (startAlphaType)
+	case START_ALPHA_ZERO
+          startAlpha = zeros(numNodes-2,1);
+	case START_ALPHA_PREVIOUS
+	  startAlpha = ( currentV(2:numNodes-1) - previousV(2:numNodes-1) )/deltaT;
+	case START_ALPHA_ANALYTIC
+	  startAlpha = ( analyticV(2:numNodes-1) - previousV(2:numNodes-1) )/deltaT;
+	otherwise
+          printf("ERROR: Invalid start alpha value.\n");
+          quit
+      endswitch
+    case THIRD_DEGREE
+      currentU(1) = analyticU(1);
+      currentU(numNodes) = analyticU(numNodes);
+      currentV(1) = analyticV(1);
+      currentV(numNodes) = analyticV(numNodes);
+      currentA(1) = analyticA(1);
+      currentA(numNodes) = analyticA(numNodes);
+      alpha(1) = ( currentA(1) - previousA(1) )/deltaT;
+      alpha(numNodes) = ( currentA(numNodes) - previousA(numNodes) )/deltaT;
+      switch (startAlphaType)
+	case START_ALPHA_ZERO
+          startAlpha = zeros(numNodes-2,1);
+	case START_ALPHA_PREVIOUS
+	  startAlpha = ( currentA(2:numNodes-1) - previousA(2:numNodes-1) )/deltaT;
+	case START_ALPHA_ANALYTIC
+	  startAlpha = ( analyticA(2:numNodes-1) - previousA(2:numNodes-1) )/deltaT;
+	otherwise
+          printf("ERROR: Invalid start alpha value.\n");
+          quit
+      endswitch
+    otherwise
+      printf("ERROR: Invalid degree value.\n");
+      quit
+  endswitch
+
+endfunction
+       
+function [ currentU, currentV, currentA, currentG ] = currentCalculate ( myAlpha )
+
+   global previousU;
+   global previousV;
+   global previousA;
+   global degree;
+   global FIRST_DEGREE;
+   global SECOND_DEGREE;
+   global THIRD_DEGREE;
+   global deltaT;
+   global numNodes;
+
+   switch (degree)
+     case FIRST_DEGREE
+       currentU = previousU + deltaT*myAlpha;
+       currentV = zeros(numNodes,1);
+       currentA = zeros(numNodes,1);
+     case SECOND_DEGREE
+       currentU = previousU + deltaT*deltaT*myAlpha/2.0;
+       currentV = previousV + deltaT*myAlpha;
+       currentA = zeros(numNodes,1);
+     case THIRD_DEGREE
+       currentU = previousU + deltaT*previousV + deltaT*deltaT*previousA/2.0 + deltaT*deltaT*deltaT*myAlpha/6.0;
+       currentV = previousV + deltaT*previousA + deltaT*deltaT*myAlpha/2.0;
+       currentA = previousA + deltaT*myAlpha;
+     otherwise
+       printf("ERROR: Invalid degree value.\n");
+       quit
+   endswitch
+
+   currentG = g( currentU );
+
+endfunction
+
+function updatePrevious ( )
+
+   global currentU;
+   global currentV;
+   global currentA;
+   global currentG;
+   global previousU;
+   global previous2U;
+   global previous3U;
+   global previousV;
+   global previousA;
+   global previousG;
+   global previous2G;
+   global degree;
+   global FIRST_DEGREE;
+   global SECOND_DEGREE;
+   global THIRD_DEGREE;
+   global deltaT;
+
+   switch (degree)
+     case FIRST_DEGREE
+       previousU = currentU;
+       previousG = currentG;
+     case SECOND_DEGREE
+       previous2U = previousU;
+       previous2G = previousG;
+       previousU = currentU;
+       previousV = currentV;
+       previousG = currentG;
+     case THIRD_DEGREE
+       previous3U = previous2U;
+       previous3G = previous2G;
+       previous2U = previousU;
+       previous2G = previousG;
+       previousU = currentU;
+       previousV = currentV;
+       previousA = currentA;
+       previousG = currentG;
+     otherwise
+       printf("ERROR: Invalid degree value.\n");
+       quit
+   endswitch
+
+endfunction
+
+function initialiseProblem( t )
+
+   global currentU;
+   global currentV;
+   global currentA;
+   global currentG;
+   global FIRST_DEGREE;
+   global SECOND_DEGREE;
+   global THIRD_DEGREE;
+   global degree;
+   global numNodes;
+   global analyticFunction
+
+   [ analyticU, analyticV, analyticA ] = analytic( t );
+
+   switch (degree)
+     case FIRST_DEGREE
+       currentU = analyticU;
+       currentV = zeros(numNodes,1);
+       currentA = zeros(numNodes,1);
+     case SECOND_DEGREE
+       currentU = analyticU;
+       currentV = analyticV;
+       currentA = zeros(numNodes,1);
+     case THIRD_DEGREE
+       currentU = analyticU;
+       currentV = analyticV;
+       currentA = analyticA;
+    otherwise
+       printf("ERROR: Invalid degree value.\n");
+       quit
+   endswitch
+       
+   currentG = g( currentU );
+   switch (degree)
+     case FIRST_DEGREE
+     case SECOND_DEGREE
+       previousG = currentG;
+     case THIRD_DEGREE
+       previousG = currentG;
+       previous2G = currentG;
+     otherwise
+       printf("ERROR: Invalid degree value.\n");
+       quit
+   endswitch
+	 
+endfunction	 
+
+global x = zeros(numNodes,1);
+global K = zeros(numNodes,numNodes);
+global C = zeros(numNodes,numNodes);
+global M = zeros(numNodes,numNodes);
+global A = zeros(numNodes,numNodes);
+global analyticU = zeros(numNodes,1);
+global analyticV = zeros(numNodes,1);
+global analyticA = zeros(numNodes,1);
+global currentU = zeros(numNodes,1);
+global currentV = zeros(numNodes,1);
+global currentA = zeros(numNodes,1);
+global meanPredictedU = zeros(numNodes,1);
+global meanPredictedV = zeros(numNodes,1);
+global meanPredictedA = zeros(numNodes,1);
+global predictedU = zeros(numNodes,1);
+global previousU = zeros(numNodes,1);
+global previousV = zeros(numNodes,1);
+global previousA = zeros(numNodes,1);
+global currentG = zeros(numNodes,1);
+global analyticG = zeros(numNodes,1);
+global previousG = zeros(numNodes,1);
+global previous2G = zeros(numNodes,1);
+global previous3G = zeros(numNodes,1);
+global reducedAlpha = zeros(numNodes-2,1);
+global alpha = zeros(numNodes,1);
+global beta = zeros(numNodes,1);
+global resid = zeros(numNodes,1);
+global psi = zeros(numNodes,1);
+global analyticResidual = zeros(numNodes,1);
+global uError = zeros(numNodes,1);
+global uPerError = zeros(numNodes,1);
+global uRMSError = 0.0;
+global vError = zeros(numNodes,1);
+global vPerError = zeros(numNodes,1);
+global vRMSError = 0.0;
+global aError = zeros(numNodes,1);
+global aPerError = zeros(numNodes,1);
+global aRMSError = 0.0;
+
+t = startT
+
+x = computeGeometry( );
+
+initialiseProblem( t )
+
+currentU
+currentV
+currentA
+currentG
+
+[ A, M, C, K ] = computeMatrices( )
+       
+while t < stopT
+
+  updatePrevious( )
+
+  t = t + deltaT
+
+  previousU
+  previousV
+  previousA
+  previousG
   
-  #startalpha = analyticv(2:np-1);
+  [ analyticU, analyticV, analyticA, analyticG ] = analytic( t )  
 
-  #[ reducedalpha, fval, info ] = fsolve( @reducedfunction, startalpha );
-  [ reducedalpha, fval, info ] = fsolve( @reducedfunction, startalpha, optimset ("jacobian", "on") )
+  [meanPredictedU, meanPredictedV, meanPredictedA ] = meanPredictedCalculate( )
 
-  alpha(2:np-1) = reducedalpha
+  predictedU = predictedUCalculate( )
 
-  u = predictedu + deltat*alpha
+  [ alpha, startAlpha ] = updateBoundaryConditions( )
+  
+  beta = M*meanPredictedA + C*meanPredictedV + K*meanPredictedU
 
-  v = (u - prevu)/deltat;
+  [ reducedAlpha, fval, info ] = fsolve( @reducedFunction, startAlpha );
+  #[ reducedAlpha, fval, info ] = fsolve( @reducedFunction, startAlpha, optimset ("jacobian", "on") )
 
-  currentg = g( u );
+  alpha(2:numNodes-1) = reducedAlpha
 
-  analyticg = g( analyticu );
+  [ currentU, currentV, currentA, currentG ] = currentCalculate( alpha )
 
   #A*alpha
 
   #beta
 
-  psi = A*alpha + theta*currentg + (1-theta)*prevg + beta;
+  psi = A*alpha + currentFunctionFactor*currentG + previousFunctionFactor*previousG + previous2FunctionFactor*previous2G + previous3FunctionFactor*previous3G + beta
 
-  resid = C*v + K*u + currentg;
+  resid = M*currentA + C*currentV + K*currentU + currentG
 
-  analyticresid =  C*analyticv + K*analyticu + analyticg;
+  analyticResidual =  M*analyticA + C*analyticV + K*analyticU + analyticG
 
-  [ uerr, unormerr ] = error( u, analyticu )
+  [ uError, uPerError, uRMSError ] = error( currentU, analyticU );
+  [ vError, vPerError, vRMSError ] = error( currentV, analyticV );
+  [ aError, aPerError, aRMSError ] = error( currentA, analyticA );
 
-  unormerr
+  uRMSError
+  vRMSError
+  aRMSError
   
-  plot(x, u, x, analyticu,x,resid)
+  plot(x, currentU, x, analyticU, x, resid)
+  #plot(x, uError)
   
   pause(0.05)
 

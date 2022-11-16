@@ -16,20 +16,21 @@ PROGRAM BurgersGeneralised
   !-----------------------------------------------------------------------------------------------------------
 
   !Test program parameters
-  INTEGER(CMISSIntg), PARAMETER :: COORDINATE_SYSTEM_USER_NUMBER=1
-  INTEGER(CMISSIntg), PARAMETER :: REGION_USER_NUMBER=2
-  INTEGER(CMISSIntg), PARAMETER :: BASIS_USER_NUMBER=3
-  INTEGER(CMISSIntg), PARAMETER :: GENERATED_MESH_USER_NUMBER=4
-  INTEGER(CMISSIntg), PARAMETER :: MESH_USER_NUMBER=5
-  INTEGER(CMISSIntg), PARAMETER :: DECOMPOSITION_USER_NUMBER=6
-  INTEGER(CMISSIntg), PARAMETER :: DECOMPOSER_USER_NUMBER=7
-  INTEGER(CMISSIntg), PARAMETER :: GEOMETRIC_FIELD_USER_NUMBER=8
-  INTEGER(CMISSIntg), PARAMETER :: EQUATIONS_SET_FIELD_USER_NUMBER=9
-  INTEGER(CMISSIntg), PARAMETER :: DEPENDENT_FIELD_USER_NUMBER=10
-  INTEGER(CMISSIntg), PARAMETER :: MATERIALS_FIELD_USER_NUMBER=11
-  INTEGER(CMISSIntg), PARAMETER :: EQUATIONS_SET_USER_NUMBER=12
-  INTEGER(CMISSIntg), PARAMETER :: PROBLEM_USER_NUMBER=13
-  INTEGER(CMISSIntg), PARAMETER :: ANALYTIC_FIELD_USER_NUMBER=14
+  INTEGER(CMISSIntg), PARAMETER :: CONTEXT_USER_NUMBER=1
+  INTEGER(CMISSIntg), PARAMETER :: COORDINATE_SYSTEM_USER_NUMBER=2
+  INTEGER(CMISSIntg), PARAMETER :: REGION_USER_NUMBER=3
+  INTEGER(CMISSIntg), PARAMETER :: BASIS_USER_NUMBER=4
+  INTEGER(CMISSIntg), PARAMETER :: GENERATED_MESH_USER_NUMBER=5
+  INTEGER(CMISSIntg), PARAMETER :: MESH_USER_NUMBER=6
+  INTEGER(CMISSIntg), PARAMETER :: DECOMPOSITION_USER_NUMBER=7
+  INTEGER(CMISSIntg), PARAMETER :: DECOMPOSER_USER_NUMBER=8
+  INTEGER(CMISSIntg), PARAMETER :: GEOMETRIC_FIELD_USER_NUMBER=9
+  INTEGER(CMISSIntg), PARAMETER :: EQUATIONS_SET_FIELD_USER_NUMBER=10
+  INTEGER(CMISSIntg), PARAMETER :: DEPENDENT_FIELD_USER_NUMBER=11
+  INTEGER(CMISSIntg), PARAMETER :: MATERIALS_FIELD_USER_NUMBER=12
+  INTEGER(CMISSIntg), PARAMETER :: ANALYTIC_FIELD_USER_NUMBER=13
+  INTEGER(CMISSIntg), PARAMETER :: EQUATIONS_SET_USER_NUMBER=14
+  INTEGER(CMISSIntg), PARAMETER :: PROBLEM_USER_NUMBER=15
 
   !Program variables
   INTEGER(CMISSIntg) :: dynamicSolverOutputType
@@ -41,6 +42,7 @@ PROGRAM BurgersGeneralised
   REAL(CMISSRP) :: startTime
   REAL(CMISSRP) :: stopTime
   REAL(CMISSRP) :: timeIncrement
+  LOGICAL :: directoryExists
 
   !Program types
   TYPE(cmfe_BasisType) :: basis
@@ -69,9 +71,11 @@ PROGRAM BurgersGeneralised
   LOGICAL :: directLinearSolverFlag,exportField
 
   !Intialise OpenCMISS
-  CALL cmfe_Context_Initialise(context,err)
-  CALL cmfe_Initialise(context,err)
+  CALL cmfe_Initialise(err)
   CALL cmfe_ErrorHandlingModeSet(CMFE_ERRORS_TRAP_ERROR,err)
+  !Create a context
+  CALL cmfe_Context_Initialise(context,err)
+  CALL cmfe_Context_Create(CONTEXT_USER_NUMBER,context,err)
   CALL cmfe_Region_Initialise(worldRegion,err)
   CALL cmfe_Context_WorldRegionGet(context,worldRegion,err)
 
@@ -375,6 +379,9 @@ PROGRAM BurgersGeneralised
   !SOLVE
   !-----------------------------------------------------------------------------------------------------------
 
+  INQUIRE(file="./results", exist=directoryExists)
+  IF(.NOT.directoryExists) CALL EXECUTE_COMMAND_LINE("mkdir ./output")
+  
   !Solve the problem
   WRITE(*,'(A)') "Solving problem..."
   CALL cmfe_Problem_Solve(problem,err)
@@ -396,7 +403,11 @@ PROGRAM BurgersGeneralised
     CALL cmfe_Fields_Finalise(fields,err)
   ENDIF
 
-  CALL cmfe_Finalise(context,err)
+  !Destroy the context
+  CALL cmfe_Context_Destroy(context,err)
+  !Finalise OpenCMISS
+  CALL cmfe_Finalise(err)
+  
   WRITE(*,'(A)') "Program successfully completed."
 
 END PROGRAM BurgersGeneralised
