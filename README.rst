@@ -12,9 +12,10 @@ Building the example
 The fortran version of the example can be configured and built with CMake::
 
   git clone https://github.com/OpenCMISS-Examples/burgers_generalised.git
-  mkdir burgers_generalised-build
-  cd burgers_generalised-build
-  cmake -DOpenCMISSLibs_DIR=~/opencmiss/install/  ../burgers_generalised/
+  cd burgers_generalised
+  mkdir build
+  cd build
+  cmake -DOpenCMISS_INSTALL_ROOT=/path/to/opencmiss/install/  ../.
   make
 
 
